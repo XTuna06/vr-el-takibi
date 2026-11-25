@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <title>Karton VR El Takibi Prototipi</title>
+  <title>Karton VR Pro - Çift El & Jiroskop</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
@@ -11,32 +11,46 @@
       height: 100%;
       background: #000;
       color: #fff;
-      font-family: system-ui, sans-serif;
+      font-family: system-ui, -apple-system, sans-serif;
       overflow: hidden;
       touch-action: none;
     }
     #ui {
       position: fixed;
       inset: 0;
-      z-index: 20;
+      z-index: 30;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       gap: 14px;
-      background: rgba(0, 0, 0, 0.85);
+      background: rgba(0, 0, 0, 0.88);
       padding: 20px;
       text-align: center;
+    }
+    #ui p {
+      max-width: 460px;
+      font-size: 14px;
+      line-height: 1.5;
+      color: #d6e2f0;
     }
     button {
       padding: 14px 24px;
       font-size: 16px;
-      font-weight: 600;
+      font-weight: 700;
       border: none;
-      border-radius: 10px;
+      border-radius: 12px;
       background: #00d084;
       color: #000;
       cursor: pointer;
+    }
+    .mini-btn {
+      padding: 6px 10px;
+      font-size: 12px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.16);
+      color: #fff;
+      font-weight: 600;
     }
     #vr-container {
       width: 100vw;
@@ -48,7 +62,7 @@
       width: 50vw;
       height: 100vh;
       overflow: hidden;
-      border-right: 1px solid rgba(255, 255, 255, 0.15);
+      border-right: 1px solid rgba(255, 255, 255, 0.16);
     }
     .eye:last-child { border-right: none; }
     canvas {
@@ -61,25 +75,51 @@
       top: 8px;
       left: 50%;
       transform: translateX(-50%);
-      z-index: 15;
-      background: rgba(0, 0, 0, 0.6);
-      padding: 4px 10px;
-      border-radius: 6px;
+      z-index: 20;
+      background: rgba(0, 0, 0, 0.65);
+      padding: 5px 12px;
+      border-radius: 8px;
       font-size: 12px;
+      white-space: nowrap;
       pointer-events: none;
+    }
+    #controls {
+      position: fixed;
+      bottom: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 20;
+      display: flex;
+      gap: 8px;
+      background: rgba(0, 0, 0, 0.65);
+      padding: 6px 10px;
+      border-radius: 10px;
+      align-items: center;
+      font-size: 12px;
     }
     video { display: none; }
   </style>
 </head>
 <body>
   <div id="ui">
-    <h2>Karton VR El Takibi</h2>
-    <p>Arka kamerayı açar, işaret parmağını imleç yapar ve başparmakla birleştirince (pinch) hedefi tetikler.</p>
-    <button id="startBtn">Kamerayı ve VR Modunu Başlat</button>
+    <h2>Karton VR El & Kafa Takibi</h2>
+    <p>
+      Çift el algılama, <b>Pinch</b> (tıkla/tut), <b>Yumruk</b> (küpü yakala/patlat) ve <b>Jiroskop</b> kafa takibi aktif.
+      Sarı hedefi vurabilir veya turuncu küpü sürükleyip bırakabilirsin.
+    </p>
+    <button id="startBtn">Sistemi Başlat (Kamera + Sensör)</button>
     <div id="status">Hazır</div>
   </div>
 
-  <div id="hud">Durum: Bekleniyor | Tıklama: 0</div>
+  <div id="hud">Skor: 0 | Eller: 0 | Hareket: Yok</div>
+
+  <div id="controls">
+    <button class="mini-btn" id="ipdMinus">IPD -</button>
+    <span id="ipdLabel">IPD: 0.015</span>
+    <button class="mini-btn" id="ipdPlus">IPD +</button>
+    <button class="mini-btn" id="recenterBtn">Kafayı Ortala</button>
+  </div>
+
   <video id="cam" playsinline muted></video>
 
   <div id="vr-container">
@@ -104,13 +144,60 @@
     const leftCtx = leftCanvas.getContext("2d");
     const rightCtx = rightCanvas.getContext("2d");
 
+    const ipdMinus = document.getElementById("ipdMinus");
+    const ipdPlus = document.getElementById("ipdPlus");
+    const ipdLabel = document.getElementById("ipdLabel");
+    const recenterBtn = document.getElementById("recenterBtn");
+
     let handLandmarker = null;
     let lastVideoTime = -1;
-    let clicks = 0;
-    let wasPinching = false;
+    let score = 0;
 
-    // Normalize edilmiş (0..1) sanal hedef konumu
-    let target = { x: 0.5, y: 0.5, radius: 0.08 };
+    // Gözler arası yatay kayma (IPD)
+    let eyeOffset = 0.015;
+    const pinchThreshold = 0.062;
+
+    // Kafa takibi (jiroskop)
+    let headYaw = 0;
+    let headPitch = 0;
+    let baseYaw = null;
+    let basePitch = null;
+
+    // Hareketli hedef
+    let target = {
+      x: 0.5,
+      y: 0.45,
+      vx: 0.0022,
+      vy: 0.0016,
+      radius: 0.065
+    };
+
+    // Sürükle-bırak küp
+    let cube = {
+      x: 0.35,
+      y: 0.65,
+      size: 0.11,
+      grabbed: false
+    };
+
+    let prevPinching = [false, false];
+
+    function updateIpdLabel() {
+      ipdLabel.textContent = `IPD: ${eyeOffset.toFixed(3)}`;
+    }
+    ipdMinus.addEventListener("click", () => {
+      eyeOffset = Math.max(0.0, +(eyeOffset - 0.004).toFixed(3));
+      updateIpdLabel();
+    });
+    ipdPlus.addEventListener("click", () => {
+      eyeOffset = Math.min(0.05, +(eyeOffset + 0.004).toFixed(3));
+      updateIpdLabel();
+    });
+    recenterBtn.addEventListener("click", () => {
+      baseYaw = null;
+      basePitch = null;
+    });
+    updateIpdLabel();
 
     function resizeCanvases() {
       const w = Math.floor(window.innerWidth / 2);
@@ -123,8 +210,36 @@
     window.addEventListener("resize", resizeCanvases);
     resizeCanvases();
 
+    async function initSensors() {
+      if (
+        typeof DeviceOrientationEvent !== "undefined" &&
+        typeof DeviceOrientationEvent.requestPermission === "function"
+      ) {
+        try {
+          await DeviceOrientationEvent.requestPermission();
+        } catch (_) {}
+      }
+
+      window.addEventListener("deviceorientation", (e) => {
+        const yaw = e.alpha ?? 0;
+        const pitch = e.beta ?? 0;
+        if (baseYaw === null) {
+          baseYaw = yaw;
+          basePitch = pitch;
+        }
+        // Farkı [-1, 1] aralığına yumuşak şekilde ölçekle
+        let dYaw = yaw - baseYaw;
+        if (dYaw > 180) dYaw -= 360;
+        if (dYaw < -180) dYaw += 360;
+
+        const dPitch = pitch - basePitch;
+        headYaw = Math.max(-0.22, Math.min(0.22, -(dYaw / 120)));
+        headPitch = Math.max(-0.22, Math.min(0.22, dPitch / 140));
+      });
+    }
+
     async function initMediaPipe() {
-      statusEl.textContent = "El takip modeli yükleniyor...";
+      statusEl.textContent = "Çift el takip modeli yükleniyor...";
       const vision = await FilesetResolver.forVisionTasks(
         "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
       );
@@ -135,7 +250,7 @@
           delegate: "GPU"
         },
         runningMode: "VIDEO",
-        numHands: 1
+        numHands: 2
       });
     }
 
@@ -153,98 +268,178 @@
       await video.play();
     }
 
-    function moveTarget() {
-      target.x = 0.22 + Math.random() * 0.56;
-      target.y = 0.25 + Math.random() * 0.50;
+    function analyzeHand(hand) {
+      const wrist = hand[0];
+      const thumbTip = hand[4];
+      const indexTip = hand[8];
+      const middleTip = hand[12];
+      const ringTip = hand[16];
+      const pinkyTip = hand[20];
+
+      const pinchDist = Math.hypot(thumbTip.x - indexTip.x, thumbTip.y - indexTip.y);
+      const isPinching = pinchDist < pinchThreshold;
+
+      // Yumruk tespiti: 4 parmak ucunun bileğe ortalama uzaklığı
+      const avgTipToWrist =
+        (Math.hypot(indexTip.x - wrist.x, indexTip.y - wrist.y) +
+          Math.hypot(middleTip.x - wrist.x, middleTip.y - wrist.y) +
+          Math.hypot(ringTip.x - wrist.x, ringTip.y - wrist.y) +
+          Math.hypot(pinkyTip.x - wrist.x, pinkyTip.y - wrist.y)) / 4;
+
+      const isFist = avgTipToWrist < 0.16;
+      const gesture = isPinching ? "Pinch" : isFist ? "Yumruk" : "Açık El";
+
+      return {
+        indexX: indexTip.x,
+        indexY: indexTip.y,
+        isPinching,
+        isFist,
+        gesture
+      };
     }
 
-    function drawEye(ctx, w, h, landmarks, isPinching, eyeOffsetX) {
+    function updateWorld() {
+      // Hedefi hareket ettir
+      target.x += target.vx;
+      target.y += target.vy;
+      if (target.x < 0.2 || target.x > 0.8) target.vx *= -1;
+      if (target.y < 0.22 || target.y > 0.72) target.vy *= -1;
+    }
+
+    function drawEye(ctx, w, h, landmarks, handStates, shiftX) {
       ctx.clearRect(0, 0, w, h);
 
-      // 1. Kamera görüntüsü (passthrough)
+      // 1. Kamera passthrough görüntüsü
       if (video.readyState >= 2) {
         ctx.drawImage(video, 0, 0, w, h);
       }
 
-      // Hafif karanlık VR overlay
-      ctx.fillStyle = "rgba(0, 10, 20, 0.22)";
+      // Hafif VR katmanı
+      ctx.fillStyle = "rgba(0, 12, 24, 0.22)";
       ctx.fillRect(0, 0, w, h);
 
-      // 2. Sanal hedef (IPD derinlik kayması ile)
-      const tx = Math.min(Math.max(target.x + eyeOffsetX, 0.08), 0.92) * w;
-      const ty = target.y * h;
+      // Kafa takibi (jiroskop) kayması
+      const camOffsetX = shiftX + headYaw;
+      const camOffsetY = headPitch;
+
+      // 2. Hareketli sarı hedef
+      const tx = Math.min(Math.max(target.x + camOffsetX, 0.07), 0.93) * w;
+      const ty = Math.min(Math.max(target.y + camOffsetY, 0.08), 0.92) * h;
       const tr = target.radius * Math.min(w, h);
 
       ctx.beginPath();
       ctx.arc(tx, ty, tr, 0, Math.PI * 2);
-      ctx.fillStyle = isPinching ? "rgba(0, 255, 140, 0.45)" : "rgba(255, 180, 0, 0.35)";
+      ctx.fillStyle = "rgba(255, 195, 0, 0.35)";
       ctx.fill();
       ctx.lineWidth = 3;
       ctx.strokeStyle = "#ffd000";
       ctx.stroke();
 
-      // 3. El eklem noktaları ve işaret parmağı imleci
+      // 3. Sürükle-bırak turuncu küp
+      const cSize = cube.size * Math.min(w, h);
+      const cx = Math.min(Math.max(cube.x + camOffsetX, 0.05), 0.95) * w - cSize / 2;
+      const cy = Math.min(Math.max(cube.y + camOffsetY, 0.05), 0.95) * h - cSize / 2;
+
+      ctx.fillStyle = cube.grabbed ? "rgba(0, 255, 150, 0.55)" : "rgba(255, 105, 30, 0.55)";
+      ctx.fillRect(cx, cy, cSize, cSize);
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = cube.grabbed ? "#00ff96" : "#ff7b39";
+      ctx.strokeRect(cx, cy, cSize, cSize);
+
+      // 4. Algılanan eller (çift el destekli)
       if (landmarks && landmarks.length > 0) {
-        const hand = landmarks[0];
+        landmarks.forEach((hand, idx) => {
+          const st = handStates[idx];
 
-        ctx.fillStyle = "rgba(0, 220, 255, 0.85)";
-        for (const pt of hand) {
-          const px = Math.min(Math.max(pt.x + eyeOffsetX, 0), 1) * w;
-          const py = pt.y * h;
+          ctx.fillStyle = idx === 0 ? "rgba(0, 225, 255, 0.85)" : "rgba(180, 120, 255, 0.85)";
+          for (const pt of hand) {
+            const px = Math.min(Math.max(pt.x + shiftX, 0), 1) * w;
+            const py = Math.min(Math.max(pt.y, 0), 1) * h;
+            ctx.beginPath();
+            ctx.arc(px, py, 3, 0, Math.PI * 2);
+            ctx.fill();
+          }
+
+          const ix = Math.min(Math.max(st.indexX + shiftX, 0), 1) * w;
+          const iy = Math.min(Math.max(st.indexY, 0), 1) * h;
+
           ctx.beginPath();
-          ctx.arc(px, py, 3, 0, Math.PI * 2);
+          ctx.arc(ix, iy, st.isPinching ? 13 : 8, 0, Math.PI * 2);
+          ctx.fillStyle = st.isPinching ? "#00ff88" : "#ff3b5c";
           ctx.fill();
-        }
-
-        const indexTip = hand[8];
-        const ix = Math.min(Math.max(indexTip.x + eyeOffsetX, 0), 1) * w;
-        const iy = indexTip.y * h;
-
-        ctx.beginPath();
-        ctx.arc(ix, iy, isPinching ? 12 : 8, 0, Math.PI * 2);
-        ctx.fillStyle = isPinching ? "#00ff88" : "#ff3b5c";
-        ctx.fill();
+        });
       }
     }
 
     function renderLoop() {
+      updateWorld();
+
       if (video.readyState >= 2 && video.currentTime !== lastVideoTime) {
         lastVideoTime = video.currentTime;
         const now = performance.now();
         const result = handLandmarker.detectForVideo(video, now);
 
-        let isPinching = false;
+        const handStates = [];
+        let activeGesture = "Yok";
+
         if (result.landmarks && result.landmarks.length > 0) {
-          const hand = result.landmarks[0];
-          const thumbTip = hand[4];
-          const indexTip = hand[8];
+          result.landmarks.forEach((hand, idx) => {
+            const st = analyzeHand(hand);
+            handStates.push(st);
+            if (idx === 0) activeGesture = st.gesture;
 
-          const dx = thumbTip.x - indexTip.x;
-          const dy = thumbTip.y - indexTip.y;
-          const dist = Math.hypot(dx, dy);
+            const pointerX = st.indexX + headYaw;
+            const pointerY = st.indexY + headPitch;
 
-          // Başparmak ile işaret parmağı mesafesi eşiği
-          isPinching = dist < 0.06;
+            // Hedef vurma (pinch başladığında)
+            const hitTarget =
+              Math.hypot(pointerX - target.x, pointerY - target.y) < target.radius + 0.045;
+            if (st.isPinching && !prevPinching[idx] && hitTarget) {
+              score += 1;
+              target.x = 0.22 + Math.random() * 0.56;
+              target.y = 0.24 + Math.random() * 0.48;
+            }
 
-          const ix = indexTip.x + 0.015;
-          const iy = indexTip.y;
-          const hit = Math.hypot(ix - target.x, iy - target.y) < target.radius + 0.04;
+            // Küp sürükle-bırak (pinch ile yakala, bırakınca bırak)
+            const nearCube =
+              Math.abs(pointerX - cube.x) < cube.size * 0.85 &&
+              Math.abs(pointerY - cube.y) < cube.size * 0.85;
 
-          if (isPinching && !wasPinching && hit) {
-            clicks += 1;
-            moveTarget();
+            if (st.isPinching && !prevPinching[idx] && nearCube) {
+              cube.grabbed = true;
+            }
+            if (cube.grabbed && st.isPinching) {
+              cube.x = Math.max(0.1, Math.min(0.9, st.indexX - headYaw));
+              cube.y = Math.max(0.1, Math.min(0.9, st.indexY - headPitch));
+            }
+            if (!st.isPinching && cube.grabbed) {
+              cube.grabbed = false;
+            }
+
+            // Yumruk ile küpü sıfırla / fırlat
+            if (st.isFist && nearCube) {
+              score += 2;
+              cube.x = 0.25 + Math.random() * 0.5;
+              cube.y = 0.3 + Math.random() * 0.45;
+              cube.grabbed = false;
+            }
+
+            prevPinching[idx] = st.isPinching;
+          });
+
+          for (let i = result.landmarks.length; i < 2; i++) {
+            prevPinching[i] = false;
           }
-          wasPinching = isPinching;
-
-          hudEl.textContent = `El: Görüldü | Pinch: ${isPinching ? "EVET" : "Hayır"} | Skor: ${clicks}`;
         } else {
-          wasPinching = false;
-          hudEl.textContent = `El: Aranıyor... | Skor: ${clicks}`;
+          prevPinching = [false, false];
+          cube.grabbed = false;
         }
 
-        // Sağ ve sol göz arasında hafif yatay fark (stereo derinlik hissi)
-        drawEye(leftCtx, leftCanvas.width, leftCanvas.height, result.landmarks, isPinching, 0.015);
-        drawEye(rightCtx, rightCanvas.width, rightCanvas.height, result.landmarks, isPinching, -0.015);
+        const handCount = result.landmarks ? result.landmarks.length : 0;
+        hudEl.textContent = `Skor: ${score} | Eller: ${handCount} | Hareket: ${activeGesture}${cube.grabbed ? " (Küp Tutuldu)" : ""}`;
+
+        drawEye(leftCtx, leftCanvas.width, leftCanvas.height, result.landmarks, handStates, eyeOffset);
+        drawEye(rightCtx, rightCanvas.width, rightCanvas.height, result.landmarks, handStates, -eyeOffset);
       }
 
       requestAnimationFrame(renderLoop);
@@ -253,12 +448,13 @@
     startBtn.addEventListener("click", async () => {
       startBtn.disabled = true;
       try {
+        await initSensors();
         if (!handLandmarker) await initMediaPipe();
         await initCamera();
         ui.style.display = "none";
         requestAnimationFrame(renderLoop);
       } catch (err) {
-        statusEl.textContent = "Hata: " + err.message + " (HTTPS/localhost ve kamera izni gerekli)";
+        statusEl.textContent = "Hata: " + err.message;
         startBtn.disabled = false;
       }
     });
