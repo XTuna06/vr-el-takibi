@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>Karton VR - 360° Blok Kırma & Yerleştirme</title>
+  <title>Karton VR - 360° Blok Dünyası v2</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
@@ -24,19 +24,19 @@
       align-items: center;
       justify-content: center;
       gap: 14px;
-      background: #000000;
+      background: #07101f;
       padding: 24px;
       text-align: center;
     }
     #ui h2 {
       font-size: 24px;
-      color: #4ade80;
+      color: #38bdf8;
     }
     #ui p {
       max-width: 460px;
       font-size: 15px;
       line-height: 1.5;
-      color: #dbe7f3;
+      color: #e2e8f0;
     }
     button {
       padding: 15px 28px;
@@ -44,8 +44,8 @@
       font-weight: 800;
       border: none;
       border-radius: 14px;
-      background: #4ade80;
-      color: #000000;
+      background: #38bdf8;
+      color: #04101c;
       cursor: pointer;
     }
     #vr-container {
@@ -64,14 +64,13 @@
       align-items: center;
       justify-content: center;
     }
-    /* Daha geniş yuvarlak lens penceresi */
     .lens-mask {
       position: relative;
-      width: min(82vw, 86dvh);
-      height: min(82vw, 86dvh);
+      width: min(84vw, 88dvh);
+      height: min(84vw, 88dvh);
       border-radius: 50%;
       overflow: hidden;
-      background: #000000;
+      background: #07101f;
       box-shadow: 0 0 0 999px #000000;
       transform: translateZ(0);
     }
@@ -79,7 +78,6 @@
       width: 100%;
       height: 100%;
       display: block;
-      background: #000000;
     }
     video {
       position: fixed;
@@ -92,10 +90,10 @@
 </head>
 <body>
   <div id="ui">
-    <h2>Karton VR - 360° Blok Dünyası</h2>
+    <h2>Karton VR - 360° Blok Dünyası v2</h2>
     <p>
-      Geniş lens açısı ve 360° kafa dönüşü aktif (arkana bile bakabilirsin).<br />
-      <b>Pinch</b>: Seçili bloğu kır &nbsp;|&nbsp; <b>Yumruk</b>: Yeni blok yerleştir
+      Kafa dönüş yönü düzeltildi, el takibi güçlendirildi ve gece mavisi gökyüzü eklendi.<br />
+      <b>Pinch</b>: Bloğu kır &nbsp;|&nbsp; <b>Yumruk</b>: Blok yerleştir
     </p>
     <button id="startBtn">Başlat (Kamera + 360° Sensör)</button>
     <div id="status">Hazır</div>
@@ -137,42 +135,45 @@
     let lastVideoTime = -1;
     let canvasLogicalSize = 320;
 
+    // El takibi kararlılık tamponu
     let cachedLandmarks = [];
     let cachedStates = [];
     let lostFrames = 0;
-    const MAX_LOST_FRAMES = 6;
+    const MAX_LOST_FRAMES = 14;
 
     const eyeOffset = 0.014;
-    const pinchThreshold = 0.062;
+    const pinchThreshold = 0.065;
 
-    // 360 derece yatay (yaw) ve dikey (pitch) bakış açısı (radyan)
+    // 360 derece bakış açısı
     let yaw = 0;
-    let pitch = 0.22;
+    let pitch = 0.15;
     let rawAlpha = null;
     let rawBeta = null;
 
-    // Blok türleri (Minecraft paleti)
     const BLOCK_TYPES = [
-      { name: "Çimen", top: "#4ade80", left: "#22c55e", right: "#15803d", edge: "#86efac" },
-      { name: "Toprak", top: "#b45309", left: "#92400e", right: "#78350f", edge: "#f59e0b" },
-      { name: "Taş", top: "#9ca3af", left: "#6b7280", right: "#4b5563", edge: "#e5e7eb" },
-      { name: "Altın", top: "#fde047", left: "#eab308", right: "#ca8a04", edge: "#fef08a" }
+      { name: "Çimen", top: "#4ade80", left: "#22c55e", right: "#15803d", edge: "#bbf7d0" },
+      { name: "Toprak", top: "#d97706", left: "#b45309", right: "#78350f", edge: "#fde68a" },
+      { name: "Taş", top: "#cbd5e1", left: "#94a3b8", right: "#64748b", edge: "#f8fafc" },
+      { name: "Altın", top: "#fde047", left: "#eab308", right: "#a16207", edge: "#fef9c3" }
     ];
     let selectedTypeIdx = 0;
 
-    // 360 derece çevreye dağılmış 3D bloklar (yaw radyan, dist derinlik, yOffset yükseklik)
+    // Bloklar: yaw (radyan), dist (derinlik), yOffset (yükseklik), type
     let blocks = [
-      { id: 1, yaw: 0.0, dist: 2.8, yOffset: -0.25, type: 0 },
-      { id: 2, yaw: 0.35, dist: 3.1, yOffset: -0.25, type: 1 },
-      { id: 3, yaw: -0.35, dist: 3.1, yOffset: -0.25, type: 2 },
-      { id: 4, yaw: 0.0, dist: 2.8, yOffset: 0.35, type: 3 },
-      { id: 5, yaw: 1.57, dist: 2.9, yOffset: -0.15, type: 0 },   // Sağ taraf
-      { id: 6, yaw: -1.57, dist: 2.9, yOffset: -0.15, type: 2 },  // Sol taraf
-      { id: 7, yaw: 3.14, dist: 2.8, yOffset: -0.1, type: 3 },    // Tam arka
-      { id: 8, yaw: 2.6, dist: 3.2, yOffset: -0.25, type: 1 }      // Arka sağ
+      { id: 1, yaw: 0.0, dist: 2.6, yOffset: -0.2, type: 0 },
+      { id: 2, yaw: 0.32, dist: 2.8, yOffset: -0.2, type: 1 },
+      { id: 3, yaw: -0.32, dist: 2.8, yOffset: -0.2, type: 2 },
+      { id: 4, yaw: 0.0, dist: 2.6, yOffset: 0.32, type: 3 },
+      { id: 5, yaw: 1.57, dist: 2.7, yOffset: -0.1, type: 0 },
+      { id: 6, yaw: -1.57, dist: 2.7, yOffset: -0.1, type: 2 },
+      { id: 7, yaw: 3.14, dist: 2.6, yOffset: -0.1, type: 3 },
+      { id: 8, yaw: 2.5, dist: 2.9, yOffset: -0.2, type: 1 }
     ];
     let nextBlockId = 9;
     let hoveredBlockId = null;
+
+    // Kırma parçacıkları
+    let particles = [];
 
     let prevPinch = false;
     let prevFist = false;
@@ -219,13 +220,13 @@
           rawBeta = betaRad;
         }
 
-        // 360 derece tam dönüş desteği
-        let dAlpha = alphaRad - rawAlpha;
+        // Sağ/sol dönüş yönü düzeltildi
+        let dAlpha = rawAlpha - alphaRad;
         while (dAlpha > Math.PI) dAlpha -= Math.PI * 2;
         while (dAlpha < -Math.PI) dAlpha += Math.PI * 2;
 
         yaw = dAlpha;
-        pitch = Math.max(-0.65, Math.min(0.65, (betaRad - rawBeta) * 0.7 + 0.22));
+        pitch = Math.max(-0.65, Math.min(0.65, (betaRad - rawBeta) * 0.65 + 0.15));
       });
     }
 
@@ -242,9 +243,9 @@
         },
         runningMode: "VIDEO",
         numHands: 2,
-        minHandDetectionConfidence: 0.25,
-        minHandPresenceConfidence: 0.25,
-        minTrackingConfidence: 0.22
+        minHandDetectionConfidence: 0.2,
+        minHandPresenceConfidence: 0.2,
+        minTrackingConfidence: 0.18
       });
     }
 
@@ -282,12 +283,12 @@
       const pinkyTip = hand[20];
 
       const indexExtended =
-        dist(indexTip, wrist) > dist(indexPip, wrist) * 1.1 &&
-        dist(indexTip, wrist) > dist(indexMcp, wrist) * 1.2;
+        dist(indexTip, wrist) > dist(indexPip, wrist) * 1.08 &&
+        dist(indexTip, wrist) > dist(indexMcp, wrist) * 1.18;
 
-      const middleCurled = dist(middleTip, wrist) < dist(middlePip, wrist) * 1.06;
-      const ringCurled = dist(ringTip, wrist) < dist(ringPip, wrist) * 1.06;
-      const pinkyCurled = dist(pinkyTip, wrist) < dist(pinkyPip, wrist) * 1.06;
+      const middleCurled = dist(middleTip, wrist) < dist(middlePip, wrist) * 1.08;
+      const ringCurled = dist(ringTip, wrist) < dist(ringPip, wrist) * 1.08;
+      const pinkyCurled = dist(pinkyTip, wrist) < dist(pinkyPip, wrist) * 1.08;
 
       const isPointing = indexExtended && middleCurled && ringCurled && pinkyCurled;
       const isPinching = dist(thumbTip, indexTip) < pinchThreshold;
@@ -298,7 +299,7 @@
           dist(ringTip, wrist) +
           dist(pinkyTip, wrist)) / 4;
 
-      const isFist = !isPinching && avgTipToWrist < 0.165;
+      const isFist = !isPinching && avgTipToWrist < 0.175;
 
       return {
         indexX: indexTip.x,
@@ -309,7 +310,24 @@
       };
     }
 
-    // Geniş lens alanı koordinatı
+    // Önceki el noktalarıyla yumuşak birleştirme (titreme ve kopma azaltıcı)
+    function smoothLandmarks(newLandmarks) {
+      if (!cachedLandmarks || cachedLandmarks.length !== newLandmarks.length) {
+        return newLandmarks;
+      }
+      return newLandmarks.map((hand, hIdx) => {
+        const prevHand = cachedLandmarks[hIdx];
+        return hand.map((pt, pIdx) => {
+          const prev = prevHand[pIdx] || pt;
+          return {
+            x: prev.x + (pt.x - prev.x) * 0.65,
+            y: prev.y + (pt.y - prev.y) * 0.65,
+            z: pt.z
+          };
+        });
+      });
+    }
+
     function toLensPoint(nx, ny, shiftX, size) {
       const lx = 0.5 + (nx - 0.5) * 0.96 + shiftX;
       const ly = 0.5 + (ny - 0.5) * 0.96;
@@ -319,31 +337,72 @@
       };
     }
 
-    // Bloğun mevcut kafa bakışına göre ekrandaki izdüşümünü hesaplar
     function projectBlock(block, shiftX, size) {
       let relYaw = block.yaw - yaw;
       while (relYaw > Math.PI) relYaw -= Math.PI * 2;
       while (relYaw < -Math.PI) relYaw += Math.PI * 2;
 
-      // Geniş yatay görüş açısı (~130 derece)
-      const fovHalf = 1.15;
+      const fovHalf = 1.2;
       if (Math.abs(relYaw) > fovHalf + 0.35) {
         return null;
       }
 
       const sx = (0.5 + (relYaw / fovHalf) * 0.44 + shiftX) * size;
       const sy = (0.5 + (block.yOffset - pitch * 0.45) * 0.45) * size;
-      const boxSize = Math.max(24, (size * 0.19) / (block.dist * 0.36));
+      const boxSize = Math.max(26, (size * 0.2) / (block.dist * 0.35));
 
-      return { sx, sy, boxSize, relYaw };
+      return { sx, sy, boxSize };
+    }
+
+    function spawnParticles(block, color) {
+      for (let i = 0; i < 10; i++) {
+        const angle = (Math.PI * 2 * i) / 10 + Math.random() * 0.3;
+        const speed = 1.5 + Math.random() * 2.5;
+        particles.push({
+          yaw: block.yaw + (Math.random() - 0.5) * 0.12,
+          yOffset: block.yOffset + (Math.random() - 0.5) * 0.12,
+          dist: block.dist,
+          vx: Math.cos(angle) * speed * 0.015,
+          vy: Math.sin(angle) * speed * 0.015,
+          color,
+          life: 18
+        });
+      }
+    }
+
+    function updateParticles() {
+      for (const p of particles) {
+        p.yaw += p.vx;
+        p.yOffset += p.vy - 0.002;
+        p.life--;
+      }
+      particles = particles.filter((p) => p.life > 0);
+    }
+
+    function drawBackground(ctx, size) {
+      // Siyah yerine gece gökyüzü gradyanı ve ufuk çizgisi
+      const grad = ctx.createLinearGradient(0, 0, 0, size);
+      grad.addColorStop(0, "#071326");
+      grad.addColorStop(0.55, "#102a43");
+      grad.addColorStop(1, "#1b362d");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, size, size);
+
+      const horizonY = size * (0.54 - pitch * 0.25);
+      ctx.strokeStyle = "rgba(125, 211, 252, 0.22)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(0, horizonY);
+      ctx.lineTo(size, horizonY);
+      ctx.stroke();
     }
 
     function drawMinecraftBlock(ctx, proj, typeIdx, isHighlighted) {
       const t = BLOCK_TYPES[typeIdx % BLOCK_TYPES.length];
       const s = proj.boxSize;
       const half = s / 2;
-      const dX = s * 0.35;
-      const dY = -s * 0.3;
+      const dX = s * 0.36;
+      const dY = -s * 0.32;
 
       const fTL = { x: proj.sx - half, y: proj.sy - half };
       const fTR = { x: proj.sx + half, y: proj.sy - half };
@@ -382,7 +441,7 @@
 
       // Kenar çizgileri
       ctx.strokeStyle = isHighlighted ? "#ffffff" : t.edge;
-      ctx.lineWidth = isHighlighted ? 4 : 2.5;
+      ctx.lineWidth = isHighlighted ? 4.5 : 2.5;
       ctx.strokeRect(fTL.x, fTL.y, s, s);
 
       ctx.beginPath();
@@ -390,15 +449,20 @@
       ctx.moveTo(fTR.x, fTR.y); ctx.lineTo(bTR.x, bTR.y);
       ctx.moveTo(fBR.x, fBR.y); ctx.lineTo(bBR.x, bBR.y);
       ctx.stroke();
+
+      // Seçili blokta üst köşede nişan işareti
+      if (isHighlighted) {
+        ctx.strokeStyle = "#fde047";
+        ctx.lineWidth = 2.5;
+        ctx.strokeRect(fTL.x - 5, fTL.y - 5, s + 10, s + 10);
+      }
     }
 
     function drawScene(ctx, landmarks, handStates, shiftX) {
       const size = canvasLogicalSize;
 
-      ctx.fillStyle = "#000000";
-      ctx.fillRect(0, 0, size, size);
+      drawBackground(ctx, size);
 
-      // Uzaktaki blokları önce çiz (derinlik sırası)
       const projected = [];
       for (const b of blocks) {
         const p = projectBlock(b, shiftX, size);
@@ -410,6 +474,14 @@
         drawMinecraftBlock(ctx, item.proj, item.block.type, item.block.id === hoveredBlockId);
       }
 
+      // Parçacıklar
+      for (const p of particles) {
+        const proj = projectBlock(p, shiftX, size);
+        if (!proj) continue;
+        ctx.fillStyle = p.color;
+        ctx.fillRect(proj.sx - 4, proj.sy - 4, 8, 8);
+      }
+
       if (!landmarks || landmarks.length === 0) return;
 
       for (let idx = 0; idx < landmarks.length; idx++) {
@@ -418,7 +490,7 @@
         const pts = hand.map((pt) => toLensPoint(pt.x, pt.y, shiftX, size));
 
         const lineColor = st.isPinching
-          ? "#f87171"
+          ? "#fb7185"
           : st.isFist
             ? "#facc15"
             : st.isPointing
@@ -471,7 +543,7 @@
           const proj = projectBlock(b, 0, canvasLogicalSize);
           if (!proj) continue;
           const hitDist = Math.hypot(px - proj.sx, py - proj.sy);
-          if (hitDist <= proj.boxSize * 0.78) {
+          if (hitDist <= proj.boxSize * 0.85) {
             hoveredBlockId = b.id;
             break;
           }
@@ -480,6 +552,10 @@
 
       // Pinch ile blok kırma
       if (anyPinch && !prevPinch && actionCooldown === 0 && hoveredBlockId !== null) {
+        const targetBlock = blocks.find((b) => b.id === hoveredBlockId);
+        if (targetBlock) {
+          spawnParticles(targetBlock, BLOCK_TYPES[targetBlock.type % BLOCK_TYPES.length].top);
+        }
         blocks = blocks.filter((b) => b.id !== hoveredBlockId);
         hoveredBlockId = null;
         actionCooldown = 14;
@@ -488,17 +564,17 @@
       // Yumruk ile yeni blok yerleştirme
       if (anyFist && !prevFist && actionCooldown === 0) {
         const placeYaw = pointerNorm
-          ? yaw + (pointerNorm.x - 0.5) * 1.6
+          ? yaw + (pointerNorm.x - 0.5) * 1.5
           : yaw;
         const placeYOffset = pointerNorm
-          ? pitch * 0.45 + (pointerNorm.y - 0.5) * 0.9
+          ? pitch * 0.45 + (pointerNorm.y - 0.5) * 0.85
           : -0.15;
 
         blocks.push({
           id: nextBlockId++,
           yaw: placeYaw,
-          dist: 2.7,
-          yOffset: Math.max(-0.55, Math.min(0.55, placeYOffset)),
+          dist: 2.55,
+          yOffset: Math.max(-0.5, Math.min(0.5, placeYOffset)),
           type: selectedTypeIdx
         });
         selectedTypeIdx = (selectedTypeIdx + 1) % BLOCK_TYPES.length;
@@ -510,14 +586,17 @@
     }
 
     function renderLoop() {
-      if (video.readyState >= 2 && video.currentTime !== lastVideoTime) {
+      updateParticles();
+
+      if (handLandmarker && video.readyState >= 2 && video.currentTime !== lastVideoTime) {
         lastVideoTime = video.currentTime;
         const now = performance.now();
         const result = handLandmarker.detectForVideo(video, now);
 
         if (result.landmarks && result.landmarks.length > 0) {
-          cachedLandmarks = result.landmarks;
-          cachedStates = result.landmarks.map((hand) => analyzeHand(hand));
+          const smoothed = smoothLandmarks(result.landmarks);
+          cachedLandmarks = smoothed;
+          cachedStates = smoothed.map((hand) => analyzeHand(hand));
           lostFrames = 0;
         } else {
           lostFrames++;
@@ -526,12 +605,11 @@
             cachedStates = [];
           }
         }
-
-        handleInteractions(cachedStates);
-
-        drawScene(leftCtx, cachedLandmarks, cachedStates, eyeOffset);
-        drawScene(rightCtx, cachedLandmarks, cachedStates, -eyeOffset);
       }
+
+      handleInteractions(cachedStates);
+      drawScene(leftCtx, cachedLandmarks, cachedStates, eyeOffset);
+      drawScene(rightCtx, cachedLandmarks, cachedStates, -eyeOffset);
 
       requestAnimationFrame(renderLoop);
     }
