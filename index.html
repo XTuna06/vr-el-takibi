@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>Karton VR - 3D Küp & İşaret Parmağı</title>
+  <title>Karton VR - Akıcı 3D Küp</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
@@ -72,6 +72,7 @@
       overflow: hidden;
       background: #000000;
       box-shadow: 0 0 0 999px #000000;
+      transform: translateZ(0);
     }
     canvas {
       width: 100%;
@@ -79,15 +80,21 @@
       display: block;
       background: #000000;
     }
-    video { display: none; }
+    video {
+      position: fixed;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+    }
   </style>
 </head>
 <body>
   <div id="ui">
-    <h2>Karton VR - 3D Küp Modu</h2>
+    <h2>Karton VR - Akıcı 3D Küp</h2>
     <p>
-      Sadece <b>işaret parmağını</b> kaldırıp küpün üzerine getirdiğinde küpü hareket ettirebilirsin.
-      Elim normal haldeyken küp kıpırdamaz.
+      Kapalı el (yumruk) takibi güçlendirildi ve donmaları önlemek için kare hızı optimize edildi.
+      Sadece <b>işaret parmağını</b> kaldırıp küpü taşıyabilirsin.
     </p>
     <button id="startBtn">Başlat</button>
     <div id="status">Hazır</div>
@@ -121,16 +128,22 @@
 
     const leftCanvas = document.getElementById("leftCanvas");
     const rightCanvas = document.getElementById("rightCanvas");
-    const leftCtx = leftCanvas.getContext("2d");
-    const rightCtx = rightCanvas.getContext("2d");
+    const leftCtx = leftCanvas.getContext("2d", { alpha: false });
+    const rightCtx = rightCanvas.getContext("2d", { alpha: false });
     const lensMasks = document.querySelectorAll(".lens-mask");
 
     let handLandmarker = null;
     let lastVideoTime = -1;
+    let canvasLogicalSize = 280;
+
+    // Son bilinen el pozisyonunu kısa süre koruma (yumrukta anlık kopmaları engeller)
+    let cachedLandmarks = [];
+    let cachedStates = [];
+    let lostFrames = 0;
+    const MAX_LOST_FRAMES = 6;
 
     const eyeOffset = 0.014;
 
-    // 3D küp durumu (lens koordinatında 0..1 arası merkez)
     const cube = {
       x: 0.5,
       y: 0.5,
@@ -148,12 +161,13 @@
     ];
 
     function resizeCanvases() {
-      const dpr = Math.min(window.devicePixelRatio || 1, 3);
-      const maskSize = Math.floor(lensMasks[0].clientWidth || 280);
+      // iPhone'da takılmayı önlemek için DPR tavanı 1.5 tutuldu
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+      canvasLogicalSize = Math.floor(lensMasks[0].clientWidth || 280);
 
       for (const [c, ctx] of [[leftCanvas, leftCtx], [rightCanvas, rightCtx]]) {
-        c.width = Math.floor(maskSize * dpr);
-        c.height = Math.floor(maskSize * dpr);
+        c.width = Math.floor(canvasLogicalSize * dpr);
+        c.height = Math.floor(canvasLogicalSize * dpr);
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       }
     }
@@ -172,7 +186,11 @@
           delegate: "GPU"
         },
         runningMode: "VIDEO",
-        numHands: 2
+        numHands: 2,
+        // El yumruk olduğunda da takibi sürdürmesi için düşük güven eşikleri
+        minHandDetectionConfidence: 0.25,
+        minHandPresenceConfidence: 0.25,
+        minTrackingConfidence: 0.22
       });
     }
 
@@ -181,8 +199,9 @@
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: "environment" },
-          width: { ideal: 640 },
-          height: { ideal: 480 }
+          width: { ideal: 480 },
+          height: { ideal: 360 },
+          frameRate: { ideal: 60, max: 60 }
         },
         audio: false
       });
@@ -194,7 +213,6 @@
       return Math.hypot(a.x - b.x, a.y - b.y);
     }
 
-    // Sadece işaret parmağı kalkık mı kontrol eder (diğer parmaklar kıvrık/kapalı)
     function analyzePointingHand(hand) {
       const wrist = hand[0];
       const indexMcp = hand[5];
@@ -208,15 +226,13 @@
       const pinkyPip = hand[18];
       const pinkyTip = hand[20];
 
-      // İşaret parmağı uzanmış/kalkık: ucu PIP ve MCP'den bileğe göre daha uzakta
       const indexExtended =
         dist(indexTip, wrist) > dist(indexPip, wrist) * 1.12 &&
         dist(indexTip, wrist) > dist(indexMcp, wrist) * 1.25;
 
-      // Diğer 3 parmak kıvrık (ucu PIP eklemine yakın veya bileğe daha yakın)
-      const middleCurled = dist(middleTip, wrist) < dist(middlePip, wrist) * 1.05;
-      const ringCurled = dist(ringTip, wrist) < dist(ringPip, wrist) * 1.05;
-      const pinkyCurled = dist(pinkyTip, wrist) < dist(pinkyPip, wrist) * 1.05;
+      const middleCurled = dist(middleTip, wrist) < dist(middlePip, wrist) * 1.06;
+      const ringCurled = dist(ringTip, wrist) < dist(ringPip, wrist) * 1.06;
+      const pinkyCurled = dist(pinkyTip, wrist) < dist(pinkyPip, wrist) * 1.06;
 
       const isIndexOnlyUp = indexExtended && middleCurled && ringCurled && pinkyCurled;
 
@@ -241,19 +257,16 @@
       const s = cube.size * size;
       const half = s / 2;
 
-      // Merkezden dışa doğru hafif perspektif kayması (gerçek 3D derinlik hissi)
       const relX = (center.px - size / 2) / (size / 2);
       const relY = (center.py - size / 2) / (size / 2);
       const dX = s * 0.34 - relX * s * 0.14;
       const dY = -s * 0.34 - relY * s * 0.14;
 
-      // Ön yüz köşeleri
       const fTL = { x: center.px - half, y: center.py - half };
       const fTR = { x: center.px + half, y: center.py - half };
       const fBR = { x: center.px + half, y: center.py + half };
       const fBL = { x: center.px - half, y: center.py + half };
 
-      // Arka yüz köşeleri
       const bTL = { x: fTL.x + dX, y: fTL.y + dY };
       const bTR = { x: fTR.x + dX, y: fTR.y + dY };
       const bBR = { x: fBR.x + dX, y: fBR.y + dY };
@@ -263,11 +276,9 @@
       const sideFill = cube.grabbed ? "rgba(0, 245, 160, 0.16)" : "rgba(0, 180, 255, 0.14)";
       const frontFill = cube.grabbed ? "rgba(0, 245, 160, 0.28)" : "rgba(0, 180, 255, 0.24)";
 
-      ctx.save();
       ctx.lineJoin = "round";
       ctx.lineCap = "round";
 
-      // Üst yüzey (3D)
       ctx.fillStyle = sideFill;
       ctx.beginPath();
       ctx.moveTo(fTL.x, fTL.y);
@@ -277,7 +288,6 @@
       ctx.closePath();
       ctx.fill();
 
-      // Sağ yan yüzey (3D)
       ctx.beginPath();
       ctx.moveTo(fTR.x, fTR.y);
       ctx.lineTo(bTR.x, bTR.y);
@@ -286,24 +296,15 @@
       ctx.closePath();
       ctx.fill();
 
-      // Ön yüz
       ctx.fillStyle = frontFill;
-      ctx.beginPath();
-      ctx.moveTo(fTL.x, fTL.y);
-      ctx.lineTo(fTR.x, fTR.y);
-      ctx.lineTo(fBR.x, fBR.y);
-      ctx.lineTo(fBL.x, fBL.y);
-      ctx.closePath();
-      ctx.fill();
+      ctx.fillRect(fTL.x, fTL.y, s, s);
 
-      // Arka tel çerçeve
-      ctx.strokeStyle = mainColor;
-      ctx.globalAlpha = 0.55;
+      ctx.strokeStyle = "rgba(0, 180, 255, 0.5)";
+      if (cube.grabbed) ctx.strokeStyle = "rgba(0, 245, 160, 0.5)";
       ctx.lineWidth = 2.5;
       ctx.strokeRect(bTL.x, bTL.y, s, s);
 
-      // Derinlik bağlantı kenarları
-      ctx.globalAlpha = 0.85;
+      ctx.strokeStyle = mainColor;
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.moveTo(fTL.x, fTL.y); ctx.lineTo(bTL.x, bTL.y);
@@ -312,32 +313,25 @@
       ctx.moveTo(fBL.x, fBL.y); ctx.lineTo(bBL.x, bBL.y);
       ctx.stroke();
 
-      // Ön kenarlar (en net)
-      ctx.globalAlpha = 1;
-      ctx.strokeStyle = mainColor;
       ctx.lineWidth = 4.5;
       ctx.strokeRect(fTL.x, fTL.y, s, s);
-
-      ctx.restore();
     }
 
     function drawScene(ctx, landmarks, handStates, shiftX) {
-      const size = Math.floor(lensMasks[0].clientWidth || 280);
+      const size = canvasLogicalSize;
 
-      // Tam siyah arka plan
       ctx.fillStyle = "#000000";
       ctx.fillRect(0, 0, size, size);
 
-      // 3D küpü çiz
       draw3DCube(ctx, shiftX, size);
 
       if (!landmarks || landmarks.length === 0) return;
 
-      landmarks.forEach((hand, idx) => {
+      for (let idx = 0; idx < landmarks.length; idx++) {
+        const hand = landmarks[idx];
         const st = handStates[idx];
         const pts = hand.map((pt) => toLensPoint(pt.x, pt.y, shiftX, size));
 
-        // İşaret parmağı kalkıkken yeşil/parlak, normal elde mavi/mor
         const lineColor = st.isIndexOnlyUp
           ? "#00f5a0"
           : (idx === 0 ? "#38bdf8" : "#c084fc");
@@ -358,11 +352,11 @@
           const isIndexTip = i === 8;
           const isTip = i === 4 || i === 8 || i === 12 || i === 16 || i === 20;
           ctx.beginPath();
-          ctx.arc(pts[i].px, pts[i].py, isIndexTip && st.isIndexOnlyUp ? 8 : (isTip ? 6 : 4), 0, Math.PI * 2);
+          ctx.arc(pts[i].px, pts[i].py, isIndexTip && st.isIndexOnlyUp ? 7.5 : (isTip ? 5.5 : 3.5), 0, Math.PI * 2);
           ctx.fillStyle = isIndexTip && st.isIndexOnlyUp ? "#ffffff" : (isTip ? lineColor : "#ffffff");
           ctx.fill();
         }
-      });
+      }
     }
 
     function renderLoop() {
@@ -371,51 +365,57 @@
         const now = performance.now();
         const result = handLandmarker.detectForVideo(video, now);
 
-        const handStates = [];
-        let movedByAnyHand = false;
-
         if (result.landmarks && result.landmarks.length > 0) {
-          result.landmarks.forEach((hand, idx) => {
-            const st = analyzePointingHand(hand);
-            handStates.push(st);
-
-            // Sadece işaret parmağı kalkıkken küpü yakala ve taşı
-            if (st.isIndexOnlyUp) {
-              const hitRadius = cube.size * 0.78;
-              const isOverCube =
-                Math.hypot(st.indexX - cube.x, st.indexY - cube.y) <= hitRadius;
-
-              if (!cube.grabbed && isOverCube) {
-                cube.grabbed = true;
-                cube.grabbedByHand = idx;
-              }
-
-              if (cube.grabbed && cube.grabbedByHand === idx) {
-                cube.x = Math.max(0.22, Math.min(0.78, st.indexX));
-                cube.y = Math.max(0.22, Math.min(0.78, st.indexY));
-                movedByAnyHand = true;
-              }
-            } else if (cube.grabbed && cube.grabbedByHand === idx) {
-              // İşaret parmağı indirildiğinde / el normal hale döndüğünde bırak
-              cube.grabbed = false;
-              cube.grabbedByHand = -1;
-            }
-          });
-        }
-
-        if (!movedByAnyHand) {
-          // Eğer tutan el artık işaret parmağı modunda değilse bırak
-          if (cube.grabbedByHand !== -1) {
-            const activeSt = handStates[cube.grabbedByHand];
-            if (!activeSt || !activeSt.isIndexOnlyUp) {
-              cube.grabbed = false;
-              cube.grabbedByHand = -1;
-            }
+          cachedLandmarks = result.landmarks;
+          cachedStates = result.landmarks.map((hand) => analyzePointingHand(hand));
+          lostFrames = 0;
+        } else {
+          lostFrames++;
+          if (lostFrames > MAX_LOST_FRAMES) {
+            cachedLandmarks = [];
+            cachedStates = [];
           }
         }
 
-        drawScene(leftCtx, result.landmarks, handStates, eyeOffset);
-        drawScene(rightCtx, result.landmarks, handStates, -eyeOffset);
+        let movedByAnyHand = false;
+
+        for (let idx = 0; idx < cachedLandmarks.length; idx++) {
+          const st = cachedStates[idx];
+
+          if (st.isIndexOnlyUp) {
+            const hitRadius = cube.size * 0.82;
+            const isOverCube =
+              Math.hypot(st.indexX - cube.x, st.indexY - cube.y) <= hitRadius;
+
+            if (!cube.grabbed && isOverCube) {
+              cube.grabbed = true;
+              cube.grabbedByHand = idx;
+            }
+
+            if (cube.grabbed && cube.grabbedByHand === idx) {
+              // Yumuşak interpolasyon (titreme olmadan akıcı hareket)
+              const targetX = Math.max(0.22, Math.min(0.78, st.indexX));
+              const targetY = Math.max(0.22, Math.min(0.78, st.indexY));
+              cube.x += (targetX - cube.x) * 0.45;
+              cube.y += (targetY - cube.y) * 0.45;
+              movedByAnyHand = true;
+            }
+          } else if (cube.grabbed && cube.grabbedByHand === idx) {
+            cube.grabbed = false;
+            cube.grabbedByHand = -1;
+          }
+        }
+
+        if (!movedByAnyHand && cube.grabbedByHand !== -1) {
+          const activeSt = cachedStates[cube.grabbedByHand];
+          if (!activeSt || !activeSt.isIndexOnlyUp) {
+            cube.grabbed = false;
+            cube.grabbedByHand = -1;
+          }
+        }
+
+        drawScene(leftCtx, cachedLandmarks, cachedStates, eyeOffset);
+        drawScene(rightCtx, cachedLandmarks, cachedStates, -eyeOffset);
       }
 
       requestAnimationFrame(renderLoop);
