@@ -2,15 +2,15 @@
 <html lang="tr">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <title>Karton VR Net - Çift El Takibi</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Karton VR Net - iPhone SBS</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
       width: 100%;
       height: 100%;
-      background: #000;
-      color: #fff;
+      background: #000000;
+      color: #ffffff;
       font-family: system-ui, -apple-system, sans-serif;
       overflow: hidden;
       touch-action: none;
@@ -24,49 +24,54 @@
       align-items: center;
       justify-content: center;
       gap: 16px;
-      background: rgba(0, 0, 0, 0.92);
+      background: #000000;
       padding: 24px;
       text-align: center;
     }
-    #ui h2 { font-size: 24px; }
+    #ui h2 {
+      font-size: 24px;
+      color: #00f5a0;
+    }
     #ui p {
-      max-width: 480px;
+      max-width: 440px;
       font-size: 16px;
       line-height: 1.5;
-      color: #e2ecf8;
+      color: #e5ecf4;
     }
     button {
-      padding: 15px 26px;
+      padding: 15px 28px;
       font-size: 17px;
-      font-weight: 700;
+      font-weight: 800;
       border: none;
-      border-radius: 12px;
-      background: #00d084;
-      color: #000;
+      border-radius: 14px;
+      background: #00f5a0;
+      color: #000000;
       cursor: pointer;
     }
     .mini-btn {
-      padding: 8px 12px;
-      font-size: 14px;
-      border-radius: 8px;
-      background: rgba(255, 255, 255, 0.18);
-      color: #fff;
-      font-weight: 700;
+      padding: 8px 14px;
+      font-size: 15px;
+      font-weight: 800;
+      border-radius: 10px;
+      background: #1d2430;
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.25);
     }
     #vr-container {
       width: 100vw;
       height: 100vh;
       display: flex;
+      background: #000000;
     }
     .eye {
       position: relative;
       width: 50vw;
       height: 100vh;
       overflow: hidden;
-      background: #05080d;
+      background: #000000;
     }
     .eye:first-child {
-      border-right: 2px solid rgba(255, 255, 255, 0.25);
+      border-right: 2px solid #222834;
     }
     canvas {
       width: 100%;
@@ -75,66 +80,67 @@
     }
     .eye-hud {
       position: absolute;
-      top: 18%;
+      top: 22%;
       left: 50%;
       transform: translateX(-50%);
       z-index: 20;
-      background: rgba(0, 0, 0, 0.78);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      padding: 7px 14px;
+      background: rgba(12, 16, 24, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      padding: 6px 14px;
       border-radius: 10px;
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 700;
+      color: #ffffff;
       white-space: nowrap;
       pointer-events: none;
     }
     .eye-controls {
       position: absolute;
-      bottom: 18%;
+      bottom: 22%;
       left: 50%;
       transform: translateX(-50%);
       z-index: 20;
       display: flex;
       gap: 8px;
-      background: rgba(0, 0, 0, 0.78);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      padding: 7px 10px;
+      background: rgba(12, 16, 24, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      padding: 6px 10px;
       border-radius: 12px;
       align-items: center;
-      font-size: 14px;
+      font-size: 13px;
+      font-weight: 700;
     }
     video { display: none; }
   </style>
 </head>
 <body>
   <div id="ui">
-    <h2>Karton VR Çift El Takibi (Net Mod)</h2>
+    <h2>Karton VR Net Mod</h2>
     <p>
-      Jiroskop kapatıldı, görüntü keskinleştirildi ve yazılar mercek merkezine yaklaştırıldı.
-      <b>Pinch</b> ile hedefi vur veya küpü sürükle, <b>Yumruk</b> ile küpü fırlat.
+      Bulanık kamera arka planı kapatıldı. Gözlük içinde mercek merkezine odaklı parlak hedef, küp ve el göstergeleri çalışır.
     </p>
-    <button id="startBtn">Kamerayı ve VR Modunu Başlat</button>
+    <button id="startBtn">Başlat</button>
     <div id="status">Hazır</div>
   </div>
 
-  <video id="cam" playsinline muted></video>
+  <video id="cam" playsinline autoplay muted></video>
 
   <div id="vr-container">
     <div class="eye">
-      <div class="eye-hud" id="hudLeft">Skor: 0 | El: 0 | Yok</div>
+      <div class="eye-hud" id="hudLeft">Skor: 0 | El: 0</div>
       <canvas id="leftCanvas"></canvas>
       <div class="eye-controls">
         <button class="mini-btn" id="ipdMinusL">-</button>
-        <span class="ipdVal">IPD: 0.012</span>
+        <span class="ipdVal">IPD: 0.015</span>
         <button class="mini-btn" id="ipdPlusL">+</button>
       </div>
     </div>
     <div class="eye">
-      <div class="eye-hud" id="hudRight">Skor: 0 | El: 0 | Yok</div>
+      <div class="eye-hud" id="hudRight">Skor: 0 | El: 0</div>
       <canvas id="rightCanvas"></canvas>
       <div class="eye-controls">
         <button class="mini-btn" id="ipdMinusR">-</button>
-        <span class="ipdVal">IPD: 0.012</span>
+        <span class="ipdVal">IPD: 0.015</span>
         <button class="mini-btn" id="ipdPlusR">+</button>
       </div>
     </div>
@@ -157,28 +163,28 @@
     const rightCanvas = document.getElementById("rightCanvas");
     const leftCtx = leftCanvas.getContext("2d");
     const rightCtx = rightCanvas.getContext("2d");
-
     const ipdVals = document.querySelectorAll(".ipdVal");
 
     let handLandmarker = null;
     let lastVideoTime = -1;
     let score = 0;
 
-    let eyeOffset = 0.012;
+    let eyeOffset = 0.015;
     const pinchThreshold = 0.062;
 
+    // Mercek merkezine yakın konumlar (0.5 merkez)
     let target = {
-      x: 0.52,
-      y: 0.45,
-      vx: 0.0018,
-      vy: 0.0013,
-      radius: 0.072
+      x: 0.56,
+      y: 0.46,
+      vx: 0.0012,
+      vy: 0.0009,
+      radius: 0.085
     };
 
     let cube = {
-      x: 0.36,
-      y: 0.58,
-      size: 0.12,
+      x: 0.42,
+      y: 0.56,
+      size: 0.14,
       grabbed: false
     };
 
@@ -191,18 +197,18 @@
     }
 
     function changeIpd(delta) {
-      eyeOffset = Math.max(0.0, Math.min(0.045, +(eyeOffset + delta).toFixed(3)));
+      eyeOffset = Math.max(0.0, Math.min(0.05, +(eyeOffset + delta).toFixed(3)));
       updateIpdUI();
     }
 
-    document.getElementById("ipdMinusL").addEventListener("click", () => changeIpd(-0.003));
-    document.getElementById("ipdPlusL").addEventListener("click", () => changeIpd(0.003));
-    document.getElementById("ipdMinusR").addEventListener("click", () => changeIpd(-0.003));
-    document.getElementById("ipdPlusR").addEventListener("click", () => changeIpd(0.003));
+    document.getElementById("ipdMinusL").addEventListener("click", () => changeIpd(-0.004));
+    document.getElementById("ipdPlusL").addEventListener("click", () => changeIpd(0.004));
+    document.getElementById("ipdMinusR").addEventListener("click", () => changeIpd(-0.004));
+    document.getElementById("ipdPlusR").addEventListener("click", () => changeIpd(0.004));
     updateIpdUI();
 
     function resizeCanvases() {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const dpr = Math.min(window.devicePixelRatio || 1, 3);
       const cssW = Math.floor(window.innerWidth / 2);
       const cssH = window.innerHeight;
 
@@ -236,8 +242,8 @@
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: "environment" },
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
+          width: { ideal: 640 },
+          height: { ideal: 480 }
         },
         audio: false
       });
@@ -277,89 +283,77 @@
     function updateWorld() {
       target.x += target.vx;
       target.y += target.vy;
-      if (target.x < 0.28 || target.x > 0.72) target.vx *= -1;
-      if (target.y < 0.3 || target.y > 0.68) target.vy *= -1;
+      if (target.x < 0.36 || target.x > 0.64) target.vx *= -1;
+      if (target.y < 0.38 || target.y > 0.62) target.vy *= -1;
+    }
+
+    // Mercek ortasına odaklanmış koordinat dönüştürücü
+    function toLensSpace(nx, ny, shiftX, w, h) {
+      const cx = 0.5 + (nx - 0.5) * 0.52 + shiftX;
+      const cy = 0.5 + (ny - 0.5) * 0.45;
+      return {
+        px: Math.max(0.12, Math.min(0.88, cx)) * w,
+        py: Math.max(0.22, Math.min(0.78, cy)) * h
+      };
     }
 
     function drawEye(ctx, landmarks, handStates, shiftX) {
       const w = Math.floor(window.innerWidth / 2);
       const h = window.innerHeight;
 
-      ctx.clearRect(0, 0, w, h);
+      // Tam siyah arka plan (OLED netliği)
+      ctx.fillStyle = "#000000";
+      ctx.fillRect(0, 0, w, h);
 
-      // Kamera görüntüsünü en/boy oranını bozmadan ortalayarak çiz
-      if (video.readyState >= 2 && video.videoWidth && video.videoHeight) {
-        const vidRatio = video.videoWidth / video.videoHeight;
-        const eyeRatio = w / h;
-        let drawW = w;
-        let drawH = h;
-        let drawX = 0;
-        let drawY = 0;
-
-        if (vidRatio > eyeRatio) {
-          drawW = h * vidRatio;
-          drawX = (w - drawW) / 2;
-        } else {
-          drawH = w / vidRatio;
-          drawY = (h - drawH) / 2;
-        }
-        ctx.drawImage(video, drawX, drawY, drawW, drawH);
-      }
-
-      // Mercek merkezine yakın güvenli bölge (kenar bozulmalarını azaltmak için)
-      const safeMarginX = 0.18;
-      const safeMarginY = 0.22;
-      const mapX = (nx) => {
-        const clamped = Math.max(0, Math.min(1, nx + shiftX));
-        return (safeMarginX + clamped * (1 - safeMarginX * 2)) * w;
-      };
-      const mapY = (ny) => {
-        const clamped = Math.max(0, Math.min(1, ny));
-        return (safeMarginY + clamped * (1 - safeMarginY * 2)) * h;
-      };
-
-      // Sarı hedef
-      const tx = mapX(target.x);
-      const ty = mapY(target.y);
-      const tr = target.radius * Math.min(w, h);
-
+      // Merkez nişan halkası (gözün odaklanacağı referans)
+      const centerX = (0.5 + shiftX) * w;
+      const centerY = 0.5 * h;
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.14)";
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(tx, ty, tr, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(255, 200, 0, 0.38)";
-      ctx.fill();
-      ctx.lineWidth = 4;
-      ctx.strokeStyle = "#ffd500";
+      ctx.arc(centerX, centerY, Math.min(w, h) * 0.18, 0, Math.PI * 2);
       ctx.stroke();
 
-      // Sürükle-bırak küp
-      const cSize = cube.size * Math.min(w, h);
-      const cx = mapX(cube.x) - cSize / 2;
-      const cy = mapY(cube.y) - cSize / 2;
+      // Hedef halka
+      const tPos = toLensSpace(target.x, target.y, shiftX, w, h);
+      const tr = target.radius * Math.min(w, h) * 0.7;
+      ctx.beginPath();
+      ctx.arc(tPos.px, tPos.py, tr, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(255, 214, 0, 0.25)";
+      ctx.fill();
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = "#ffd600";
+      ctx.stroke();
 
-      ctx.fillStyle = cube.grabbed ? "rgba(0, 255, 145, 0.55)" : "rgba(255, 110, 35, 0.55)";
-      ctx.fillRect(cx, cy, cSize, cSize);
-      ctx.lineWidth = 4;
-      ctx.strokeStyle = cube.grabbed ? "#00ff90" : "#ff8040";
-      ctx.strokeRect(cx, cy, cSize, cSize);
+      // Küp
+      const cPos = toLensSpace(cube.x, cube.y, shiftX, w, h);
+      const cSize = cube.size * Math.min(w, h) * 0.7;
+      ctx.fillStyle = cube.grabbed ? "rgba(0, 245, 160, 0.35)" : "rgba(255, 107, 53, 0.35)";
+      ctx.fillRect(cPos.px - cSize / 2, cPos.py - cSize / 2, cSize, cSize);
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = cube.grabbed ? "#00f5a0" : "#ff6b35";
+      ctx.strokeRect(cPos.px - cSize / 2, cPos.py - cSize / 2, cSize, cSize);
 
-      // Eller
+      // El işaret parmağı ve ana eklemler (kalın ve net)
       if (landmarks && landmarks.length > 0) {
         landmarks.forEach((hand, idx) => {
           const st = handStates[idx];
 
-          ctx.fillStyle = idx === 0 ? "#00e5ff" : "#d088ff";
-          for (const pt of hand) {
+          // Sadece bilek (0) ve parmak uçları (4, 8, 12, 16, 20) - kalabalık yapmadan net görünüm
+          const keyIndices = [0, 4, 8, 12, 16, 20];
+          ctx.fillStyle = idx === 0 ? "#00e5ff" : "#c77dff";
+          for (const k of keyIndices) {
+            const pt = hand[k];
+            const kPos = toLensSpace(pt.x, pt.y, shiftX, w, h);
             ctx.beginPath();
-            ctx.arc(mapX(pt.x), mapY(pt.y), 4.5, 0, Math.PI * 2);
+            ctx.arc(kPos.px, kPos.py, 6, 0, Math.PI * 2);
             ctx.fill();
           }
 
-          const ix = mapX(st.indexX);
-          const iy = mapY(st.indexY);
-
+          const fPos = toLensSpace(st.indexX, st.indexY, shiftX, w, h);
           ctx.beginPath();
-          ctx.arc(ix, iy, st.isPinching ? 15 : 10, 0, Math.PI * 2);
-          ctx.fillStyle = st.isPinching ? "#00ff88" : "#ff3b5c";
+          ctx.arc(fPos.px, fPos.py, st.isPinching ? 18 : 13, 0, Math.PI * 2);
+          ctx.fillStyle = st.isPinching ? "#00f5a0" : "#ff2e63";
           ctx.fill();
         });
       }
@@ -383,23 +377,23 @@
             if (idx === 0) activeGesture = st.gesture;
 
             const hitTarget =
-              Math.hypot(st.indexX - target.x, st.indexY - target.y) < target.radius + 0.05;
+              Math.hypot(st.indexX - target.x, st.indexY - target.y) < target.radius + 0.06;
             if (st.isPinching && !prevPinching[idx] && hitTarget) {
               score += 1;
-              target.x = 0.32 + Math.random() * 0.36;
-              target.y = 0.34 + Math.random() * 0.3;
+              target.x = 0.4 + Math.random() * 0.2;
+              target.y = 0.42 + Math.random() * 0.16;
             }
 
             const nearCube =
-              Math.abs(st.indexX - cube.x) < cube.size * 0.9 &&
-              Math.abs(st.indexY - cube.y) < cube.size * 0.9;
+              Math.abs(st.indexX - cube.x) < cube.size * 0.95 &&
+              Math.abs(st.indexY - cube.y) < cube.size * 0.95;
 
             if (st.isPinching && !prevPinching[idx] && nearCube) {
               cube.grabbed = true;
             }
             if (cube.grabbed && st.isPinching) {
-              cube.x = Math.max(0.15, Math.min(0.85, st.indexX));
-              cube.y = Math.max(0.15, Math.min(0.85, st.indexY));
+              cube.x = Math.max(0.32, Math.min(0.68, st.indexX));
+              cube.y = Math.max(0.35, Math.min(0.65, st.indexY));
             }
             if (!st.isPinching && cube.grabbed) {
               cube.grabbed = false;
@@ -407,8 +401,8 @@
 
             if (st.isFist && nearCube) {
               score += 2;
-              cube.x = 0.3 + Math.random() * 0.4;
-              cube.y = 0.35 + Math.random() * 0.35;
+              cube.x = 0.38 + Math.random() * 0.24;
+              cube.y = 0.4 + Math.random() * 0.2;
               cube.grabbed = false;
             }
 
@@ -424,9 +418,9 @@
         }
 
         const handCount = result.landmarks ? result.landmarks.length : 0;
-        const hudText = `Skor: ${score} | El: ${handCount} | ${activeGesture}${cube.grabbed ? " (Tutuldu)" : ""}`;
-        hudLeft.textContent = hudText;
-        hudRight.textContent = hudText;
+        const text = `Skor: ${score} | El: ${handCount} | ${activeGesture}${cube.grabbed ? " (Tutuldu)" : ""}`;
+        hudLeft.textContent = text;
+        hudRight.textContent = text;
 
         drawEye(leftCtx, result.landmarks, handStates, eyeOffset);
         drawEye(rightCtx, result.landmarks, handStates, -eyeOffset);
